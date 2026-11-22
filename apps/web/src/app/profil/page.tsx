@@ -19,8 +19,8 @@ export default function ProfilLencanaPage() {
 
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
   const [fullName, setFullName] = React.useState("");
-  const [email, setEmail] = React.useState("akun@fokussprints.id");
-  const [password, setPassword] = React.useState("fokussprints123");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [loginMessage, setLoginMessage] = React.useState<string | null>(null);
 
   if (isLoading || !profile) {
@@ -51,7 +51,11 @@ export default function ProfilLencanaPage() {
         setLoginMessage(`Berhasil masuk sebagai ${res.user.full_name}.`);
       }
     } catch (err) {
-      setLoginMessage(err instanceof Error ? err.message : "Gagal memproses autentikasi.");
+      setLoginMessage(
+        err instanceof Error
+          ? err.message
+          : "Gagal memproses permintaan. Periksa kembali email dan kata sandimu."
+      );
     }
   };
 
@@ -237,9 +241,6 @@ export default function ProfilLencanaPage() {
                 </Button>
               </div>
             </div>
-            <CardDescription>
-              Akun awal bersih tersedia: akun@fokussprints.id (sandi: fokussprints123), atau daftarkan akun baru.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={(e) => void handleAuthSubmit(e)} className="space-y-3">
@@ -267,6 +268,7 @@ export default function ProfilLencanaPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  placeholder="nama@email.com"
                   required
                 />
               </div>
@@ -279,6 +281,7 @@ export default function ProfilLencanaPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Masukkan kata sandi"
                   required
                 />
               </div>
@@ -295,8 +298,8 @@ export default function ProfilLencanaPage() {
                 {loginMutation.isPending || registerMutation.isPending
                   ? "Memproses…"
                   : authMode === "register"
-                  ? "Buat Akun & Masuk"
-                  : "Masuk dengan JWT Auth"}
+                  ? "Daftar"
+                  : "Masuk"}
               </Button>
             </form>
           </CardContent>

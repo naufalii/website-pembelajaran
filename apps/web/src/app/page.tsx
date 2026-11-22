@@ -46,10 +46,10 @@ export default function HomeDashboardPage() {
       <Card tone="cream" className="mx-auto max-w-xl p-6 text-center">
         <CardContent className="space-y-4 pt-4">
           <h2 className="font-display text-2xl font-extrabold text-ink">
-            Gagal Memuat Bento Dashboard
+            Gagal Memuat Halaman Belajar
           </h2>
           <p className="text-sm font-medium text-ink/80">
-            Pastikan server backend menyala atau aktifkan mode demo melalui env.
+            Tidak dapat terhubung ke layanan saat ini. Periksa koneksimu lalu coba muat ulang.
           </p>
           <Button type="button" onClick={() => void refetch()}>
             <RefreshCw className="h-4 w-4" aria-hidden="true" />

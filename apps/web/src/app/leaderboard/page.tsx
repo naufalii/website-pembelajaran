@@ -63,9 +63,6 @@ export default function LeaderboardPage() {
               {data.current_user_rank > 0 ? `#${data.current_user_rank}` : "Belum Masuk"}
             </span>
           </Badge>
-          <Badge variant="surface">
-            {data.source === "redis_zset" ? "Redis ZSET Live" : "ZSET Engine"}
-          </Badge>
         </div>
       </div>
 

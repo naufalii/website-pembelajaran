@@ -42,9 +42,6 @@ export default function KuisSprintPage() {
           <h2 className="font-display text-2xl font-extrabold tracking-tight text-cream">
             Katalog Modul &amp; Kuis Sprint
           </h2>
-          <p className="text-sm text-sage">
-            Latih retensi memori dengan kuis kilat interaktif lintas format JSONB.
-          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -88,14 +85,11 @@ export default function KuisSprintPage() {
             />
           ) : (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center p-8 text-center">
+              <CardContent className="flex flex-col items-center justify-center gap-4 px-8 py-10 text-center">
                 <p className="font-display text-lg font-extrabold text-cream">
                   Belum Ada Soal Kuis
                 </p>
-                <p className="mt-1 max-w-md text-xs sm:text-sm text-sage leading-relaxed">
-                  Belum ada kuis tersimpan di database untuk filter ini. Tambahkan kuis JSONB lewat Swagger (POST /api/v1/quizzes) atau buat otomatis melalui AI Upload PDF.
-                </p>
-                <Button asChild size="sm" className="mt-4">
+                <Button asChild size="sm">
                   <Link href="/ai-upload">Buat Kuis dari AI Upload PDF</Link>
                 </Button>
               </CardContent>
@@ -118,7 +112,7 @@ export default function KuisSprintPage() {
           <CardContent className="space-y-2.5 max-h-[460px] overflow-y-auto pr-2">
             {quizzes.length === 0 ? (
               <p className="rounded-xl border-2 border-dashed border-sand/50 bg-forest-bg p-4 text-center text-xs text-sage">
-                Antrean kuis masih kosong. Tambahkan soal melalui API atau AI Upload PDF.
+                Belum ada soal tersedia. Buat soal baru melalui menu AI Upload PDF.
               </p>
             ) : (
               quizzes.map((item, idx) => {
@@ -179,12 +173,9 @@ export default function KuisSprintPage() {
           </div>
         ) : courses.length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center p-8 text-center">
+            <CardContent className="flex flex-col items-center justify-center px-8 py-9 text-center">
               <p className="font-display text-base font-extrabold text-cream">
                 Belum Ada Modul Micro-Learning
-              </p>
-              <p className="mt-1 max-w-md text-xs sm:text-sm text-sage">
-                Tambahkan kursus melalui POST /api/v1/courses dan pelajaran via POST /api/v1/lessons di Swagger (/docs).
               </p>
             </CardContent>
           </Card>

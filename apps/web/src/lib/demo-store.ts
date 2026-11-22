@@ -464,7 +464,7 @@ export const demoStore = {
       : "";
 
     return {
-      answer: `Berikut tanggapan untuk pertanyaanmu mengenai **"${message.slice(0, 80)}"**:${continuity}${contextNote}\n\n- **Langkah Cepat:** Pecah konsep ini menjadi 1 definisi inti dan 1 contoh nyata.\n- **Catatan:** Saat ini berada pada mode preview lokal (fallback). Hubungkan backend FastAPI dan pasang \`GEMINI_API_KEY\` untuk respons AI Live.`,
+      answer: `Berikut tanggapan untuk pertanyaanmu mengenai **"${message.slice(0, 80)}"**:${continuity}${contextNote}\n\n- **Langkah Cepat:** Pecah konsep ini menjadi 1 definisi inti dan 1 contoh nyata.\n- **Tips:** Coba tulis ulang pemahamanmu dengan bahasa sendiri untuk melatih daya ingat.`,
       suggested_followups: [
         "Beri 1 contoh soal latihan dari topik ini",
         "Jelaskan ulang dengan analogi sederhana",

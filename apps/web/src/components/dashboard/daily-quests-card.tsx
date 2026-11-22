@@ -39,12 +39,9 @@ export function DailyQuestsCard({ quests }: { quests: DailyQuest[] }) {
 
       <CardContent className="space-y-2.5 pt-1">
         {quests.length === 0 ? (
-          <div className="rounded-xl border-2 border-dashed border-sand/50 bg-forest-bg px-4 py-6 text-center">
+          <div className="rounded-xl border-2 border-dashed border-sand/50 bg-forest-bg px-4 py-7 text-center">
             <p className="font-display text-sm font-extrabold text-cream">
               Belum Ada Misi Harian
-            </p>
-            <p className="mt-1 text-xs text-sage leading-relaxed">
-              Tambahkan misi harian melalui endpoint POST /api/v1/gamification/quests di Swagger (/docs).
             </p>
           </div>
         ) : (

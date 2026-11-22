@@ -102,7 +102,7 @@ export function AiTutorDrawer({ activeLesson }: { activeLesson?: LessonSummary |
           id: `err-${Date.now()}`,
           role: "assistant",
           content:
-            "Maaf, koneksi ke server AI Tutor sedang terganggu. Pastikan backend FastAPI aktif atau coba kirim pertanyaanmu kembali.",
+            "Maaf, koneksi ke AI Tutor sedang terganggu. Silakan coba kirim pertanyaanmu kembali beberapa saat lagi.",
         },
       ]);
     }
@@ -114,11 +114,11 @@ export function AiTutorDrawer({ activeLesson }: { activeLesson?: LessonSummary |
   };
 
   const providerLabel =
-    provider === "gemini"
-      ? "AI Live: Gemini"
-      : provider === "openai"
-      ? "AI Live: OpenAI"
-      : "Mode Offline/Fallback - Pasang API Key";
+    provider === "gemini" || provider === "openai"
+      ? "AI Aktif"
+      : provider === "fallback"
+      ? "Mode Offline"
+      : "Siap Membantu";
 
   return (
     <>

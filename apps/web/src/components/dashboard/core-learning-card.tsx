@@ -16,7 +16,7 @@ function EmptyLearningState({
   description,
 }: {
   title: string;
-  description: string;
+  description?: string;
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border-[2.5px] border-dashed border-sand/60 bg-forest-bg px-6 py-10 text-center">
@@ -24,9 +24,11 @@ function EmptyLearningState({
         <BookOpen className="h-6 w-6" aria-hidden="true" />
       </div>
       <h3 className="font-display text-lg font-extrabold text-cream">{title}</h3>
-      <p className="mt-1.5 max-w-md text-xs sm:text-sm text-sage leading-relaxed">
-        {description}
-      </p>
+      {description && (
+        <p className="mt-1.5 max-w-md text-xs sm:text-sm text-sage leading-relaxed">
+          {description}
+        </p>
+      )}
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
         <Button asChild size="sm">
           <Link href="/ai-upload">
@@ -102,10 +104,7 @@ export function CoreLearningCard({
             {activeLesson ? (
               <MicroVideoPlayer lesson={activeLesson} quizzes={quizzes} />
             ) : (
-              <EmptyLearningState
-                title="Belum Ada Materi Belajar"
-                description="Belum ada kursus atau video mikro di database. Tambahkan kursus & video melalui Swagger API (/docs) atau konversi PDF/catatanmu dari menu AI Upload PDF."
-              />
+              <EmptyLearningState title="Belum Ada Materi Belajar" />
             )}
           </TabsContent>
 
@@ -117,10 +116,7 @@ export function CoreLearningCard({
                 onFinished={() => setActiveTab("video")}
               />
             ) : (
-              <EmptyLearningState
-                title="Belum Ada Kuis Kilat Harian"
-                description="Tambahkan soal kuis JSONB melalui endpoint POST /api/v1/quizzes di Swagger (/docs) atau buat kuis otomatis lewat halaman AI Upload PDF."
-              />
+              <EmptyLearningState title="Belum Ada Kuis Kilat Harian" />
             )}
           </TabsContent>
         </CardContent>
