@@ -237,16 +237,29 @@ async def _call_gemini_json(prompt_text: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _resolve_openai_compat_config(api_key: str) -> Tuple[str, str]:
+    """
+    Pilih endpoint & model berdasarkan format kunci OPENAI_API_KEY:
+    - Groq API (awalan `gsk_`): https://api.groq.com/openai/v1/chat/completions + llama-3.3-70b-versatile
+    - OpenAI API standar: https://api.openai.com/v1/chat/completions + gpt-4o-mini
+    """
+    if api_key.startswith("gsk_"):
+        return "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile"
+    return "https://api.openai.com/v1/chat/completions", "gpt-4o-mini"
+
+
 async def _call_openai_json(prompt_text: str) -> Optional[Dict[str, Any]]:
-    if not settings.OPENAI_API_KEY.strip():
+    api_key = settings.OPENAI_API_KEY.strip()
+    if not api_key:
         return None
+    endpoint, model = _resolve_openai_compat_config(api_key)
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=25.0) as client:
             resp = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY.strip()}"},
+                endpoint,
+                headers={"Authorization": f"Bearer {api_key}"},
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": model,
                     "response_format": {"type": "json_object"},
                     "messages": [
                         {
@@ -258,10 +271,12 @@ async def _call_openai_json(prompt_text: str) -> Optional[Dict[str, Any]]:
                 },
             )
             if resp.status_code != 200:
+                print(f"[AI_ERROR] {resp.status_code}: {resp.text}", flush=True)
                 return None
             data = resp.json()
             return json.loads(data["choices"][0]["message"]["content"])
-    except Exception:
+    except Exception as exc:
+        print(f"[AI_ERROR] {type(exc).__name__}: {exc}", flush=True)
         return None
 
 
@@ -333,8 +348,10 @@ async def _call_openai_chat(
     history: List[Dict[str, str]],
     system_prompt: str,
 ) -> Optional[str]:
-    if not settings.OPENAI_API_KEY.strip():
+    api_key = settings.OPENAI_API_KEY.strip()
+    if not api_key:
         return None
+    endpoint, model = _resolve_openai_compat_config(api_key)
     messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
     for turn in history[-16:]:
         role = "assistant" if turn.get("role") == "assistant" else "user"
@@ -346,21 +363,23 @@ async def _call_openai_chat(
     try:
         async with httpx.AsyncClient(timeout=25.0) as client:
             resp = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY.strip()}"},
+                endpoint,
+                headers={"Authorization": f"Bearer {api_key}"},
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": model,
                     "messages": messages,
                     "temperature": 0.65,
                     "max_tokens": 1200,
                 },
             )
             if resp.status_code != 200:
+                print(f"[AI_ERROR] {resp.status_code}: {resp.text}", flush=True)
                 return None
             data = resp.json()
             text = data["choices"][0]["message"]["content"]
             return str(text).strip() or None
-    except Exception:
+    except Exception as exc:
+        print(f"[AI_ERROR] {type(exc).__name__}: {exc}", flush=True)
         return None
 
 
