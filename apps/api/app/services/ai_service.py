@@ -117,10 +117,44 @@ def _fallback_generate_study_pack(title: str, text: str) -> Dict[str, Any]:
     }
 
 
-GEMINI_GENERATE_ENDPOINT = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.5-flash:generateContent"
-)
+GEMINI_PRIMARY_MODEL = "gemini-2.5-flash"
+GEMINI_FALLBACK_MODEL = "gemini-2.0-flash"
+
+
+def _build_gemini_endpoint(api_key: str, model: str) -> str:
+    """
+    Pilih endpoint berdasarkan format API key:
+    - Vertex AI Express (awalan `AQ.`): aiplatform.googleapis.com
+    - Gemini Developer API (`AIza...`): generativelanguage.googleapis.com
+    """
+    if api_key.startswith("AQ."):
+        return f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model}:generateContent"
+    return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+
+async def _post_gemini_with_fallback(
+    api_key: str,
+    body: Dict[str, Any],
+    timeout: float = 25.0,
+) -> Optional[Dict[str, Any]]:
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            primary_url = _build_gemini_endpoint(api_key, GEMINI_PRIMARY_MODEL)
+            resp = await client.post(primary_url, headers=headers, json=body)
+            if resp.status_code == 404:
+                fallback_url = _build_gemini_endpoint(api_key, GEMINI_FALLBACK_MODEL)
+                resp = await client.post(fallback_url, headers=headers, json=body)
+            if resp.status_code != 200:
+                print(f"[AI_ERROR] {resp.status_code}: {resp.text}", flush=True)
+                return None
+            return resp.json()
+    except Exception as exc:
+        print(f"[AI_ERROR] {type(exc).__name__}: {exc}", flush=True)
+        return None
 
 
 def _extract_gemini_text(data: Dict[str, Any]) -> Optional[str]:
@@ -182,10 +216,6 @@ async def _call_gemini_json(prompt_text: str) -> Optional[Dict[str, Any]]:
     if not api_key or not clean_prompt:
         return None
 
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
     body: Dict[str, Any] = {
         "contents": [{"role": "user", "parts": [{"text": clean_prompt}]}],
         "generationConfig": {
@@ -194,18 +224,16 @@ async def _call_gemini_json(prompt_text: str) -> Optional[Dict[str, Any]]:
             "maxOutputTokens": 2048,
         },
     }
+    data = await _post_gemini_with_fallback(api_key, body, timeout=25.0)
+    if not data:
+        return None
+    raw_text = _extract_gemini_text(data)
+    if not raw_text:
+        return None
     try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            resp = await client.post(GEMINI_GENERATE_ENDPOINT, headers=headers, json=body)
-            if resp.status_code != 200:
-                print(f"[GEMINI_400_DETAIL] {resp.status_code}: {resp.text}", flush=True)
-                return None
-            raw_text = _extract_gemini_text(resp.json())
-            if not raw_text:
-                return None
-            return json.loads(raw_text)
+        return json.loads(raw_text)
     except Exception as exc:
-        print(f"[GEMINI_JSON_ERROR] {type(exc).__name__}: {exc}", flush=True)
+        print(f"[AI_ERROR] JSONDecodeError: {exc}", flush=True)
         return None
 
 
@@ -283,10 +311,6 @@ async def _call_gemini_chat(
     if not contents:
         return None
 
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
     body: Dict[str, Any] = {
         "contents": contents,
         "generationConfig": {
@@ -298,16 +322,10 @@ async def _call_gemini_chat(
     if clean_system:
         body["systemInstruction"] = {"parts": [{"text": clean_system}]}
 
-    try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            resp = await client.post(GEMINI_GENERATE_ENDPOINT, headers=headers, json=body)
-            if resp.status_code != 200:
-                print(f"[GEMINI_400_DETAIL] {resp.status_code}: {resp.text}", flush=True)
-                return None
-            return _extract_gemini_text(resp.json())
-    except Exception as exc:
-        print(f"[GEMINI_CHAT_ERROR] {type(exc).__name__}: {exc}", flush=True)
+    data = await _post_gemini_with_fallback(api_key, body, timeout=25.0)
+    if not data:
         return None
+    return _extract_gemini_text(data)
 
 
 async def _call_openai_chat(
