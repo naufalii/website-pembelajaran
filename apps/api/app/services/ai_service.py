@@ -117,26 +117,95 @@ def _fallback_generate_study_pack(title: str, text: str) -> Dict[str, Any]:
     }
 
 
-async def _call_gemini_json(prompt_text: str) -> Optional[Dict[str, Any]]:
-    if not settings.GEMINI_API_KEY.strip():
+GEMINI_GENERATE_ENDPOINT = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "gemini-2.5-flash:generateContent"
+)
+
+
+def _extract_gemini_text(data: Dict[str, Any]) -> Optional[str]:
+    candidates = data.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
         return None
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY.strip()}"
-    )
-    body = {
-        "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.4},
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts")
+    if not isinstance(parts, list):
+        return None
+    texts = [
+        str(part.get("text", ""))
+        for part in parts
+        if isinstance(part, dict) and part.get("text") and not part.get("thought")
+    ]
+    joined = "".join(texts).strip()
+    return joined or None
+
+
+def _build_gemini_contents(
+    message: str,
+    history: List[Dict[str, str]],
+) -> List[Dict[str, Any]]:
+    """
+    Normalisasi riwayat percakapan agar 100% valid untuk Gemini REST API:
+    - Role hanya 'user' atau 'model' ('assistant' dikonversi ke 'model')
+    - Pesan kosong difilter
+    - Turn awal selalu 'user' (buang leading 'model')
+    - Turn berturut-turut dengan role sama digabung agar role selalu bergantian
+    """
+    normalized: List[Tuple[str, str]] = []
+    for turn in history[-16:]:
+        raw_role = str(turn.get("role", "user")).strip().lower()
+        role = "model" if raw_role in ("assistant", "model") else "user"
+        text = str(turn.get("content", "")).strip()
+        if not text:
+            continue
+        normalized.append((role, text))
+
+    clean_message = message.strip()
+    if clean_message:
+        normalized.append(("user", clean_message))
+
+    while normalized and normalized[0][0] != "user":
+        normalized.pop(0)
+
+    merged: List[Dict[str, Any]] = []
+    for role, text in normalized:
+        if merged and merged[-1]["role"] == role:
+            merged[-1]["parts"][0]["text"] += f"\n\n{text}"
+        else:
+            merged.append({"role": role, "parts": [{"text": text}]})
+    return merged
+
+
+async def _call_gemini_json(prompt_text: str) -> Optional[Dict[str, Any]]:
+    api_key = settings.GEMINI_API_KEY.strip()
+    clean_prompt = prompt_text.strip()
+    if not api_key or not clean_prompt:
+        return None
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
+    }
+    body: Dict[str, Any] = {
+        "contents": [{"role": "user", "parts": [{"text": clean_prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.4,
+            "maxOutputTokens": 2048,
+        },
     }
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.post(endpoint, json=body)
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            resp = await client.post(GEMINI_GENERATE_ENDPOINT, headers=headers, json=body)
             if resp.status_code != 200:
+                print(f"[GEMINI_400_DETAIL] {resp.status_code}: {resp.text}", flush=True)
                 return None
-            data = resp.json()
-            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            raw_text = _extract_gemini_text(resp.json())
+            if not raw_text:
+                return None
             return json.loads(raw_text)
-    except Exception:
+    except Exception as exc:
+        print(f"[GEMINI_JSON_ERROR] {type(exc).__name__}: {exc}", flush=True)
         return None
 
 
@@ -206,34 +275,38 @@ async def _call_gemini_chat(
     history: List[Dict[str, str]],
     system_prompt: str,
 ) -> Optional[str]:
-    if not settings.GEMINI_API_KEY.strip():
+    api_key = settings.GEMINI_API_KEY.strip()
+    if not api_key:
         return None
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY.strip()}"
-    )
-    contents: List[Dict[str, Any]] = []
-    for turn in history[-16:]:
-        role = "model" if turn.get("role") == "assistant" else "user"
-        content = str(turn.get("content", "")).strip()
-        if content:
-            contents.append({"role": role, "parts": [{"text": content}]})
-    contents.append({"role": "user", "parts": [{"text": message}]})
 
-    body: Dict[str, Any] = {
-        "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "contents": contents,
-        "generationConfig": {"temperature": 0.65, "maxOutputTokens": 1200},
+    contents = _build_gemini_contents(message, history)
+    if not contents:
+        return None
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
     }
+    body: Dict[str, Any] = {
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.65,
+            "maxOutputTokens": 2048,
+        },
+    }
+    clean_system = system_prompt.strip()
+    if clean_system:
+        body["systemInstruction"] = {"parts": [{"text": clean_system}]}
+
     try:
         async with httpx.AsyncClient(timeout=25.0) as client:
-            resp = await client.post(endpoint, json=body)
+            resp = await client.post(GEMINI_GENERATE_ENDPOINT, headers=headers, json=body)
             if resp.status_code != 200:
+                print(f"[GEMINI_400_DETAIL] {resp.status_code}: {resp.text}", flush=True)
                 return None
-            data = resp.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"]
-            return str(text).strip() or None
-    except Exception:
+            return _extract_gemini_text(resp.json())
+    except Exception as exc:
+        print(f"[GEMINI_CHAT_ERROR] {type(exc).__name__}: {exc}", flush=True)
         return None
 
 
