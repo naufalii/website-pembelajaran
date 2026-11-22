@@ -48,6 +48,15 @@ app.add_middleware(
 )
 
 
+@app.get("/", tags=["Health"], summary="Root status FokusSprints API")
+async def root_status() -> Dict[str, str]:
+    return {
+        "status": "ok",
+        "service": "FokusSprints API",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health", tags=["Health"], summary="Status kesehatan API & koneksi Redis/Database")
 async def health_check() -> Dict[str, str]:
     return {
