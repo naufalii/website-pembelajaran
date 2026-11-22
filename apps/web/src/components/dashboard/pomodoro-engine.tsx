@@ -188,7 +188,12 @@ export function PomodoroEngine({ course }: { course: CourseDetail | null }) {
               Belum ada modul video pada sesi ini. Timer Pomodoro di atas tetap siap dijalankan untuk sesi fokus bebas.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-2.5",
+                course.lessons.length === 4 ? "sm:grid-cols-2" : "sm:grid-cols-3"
+              )}
+            >
               {course.lessons.map((lesson) => {
                 const isSelected = (activeLessonId ?? course.lessons[0]?.id) === lesson.id;
                 return (

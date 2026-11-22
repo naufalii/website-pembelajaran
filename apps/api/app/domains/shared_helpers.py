@@ -15,31 +15,24 @@ DEFAULT_DEMO_EMAIL = "akun@fokussprints.id"
 
 DAILY_QUEST_TEMPLATES: List[Dict[str, object]] = [
     {
-        "quest_code": "pomodoro_1",
-        "title": "Selesaikan 1 Sesi Pomodoro",
-        "description": "Jalankan timer Deep-Focus 25 menit hingga tuntas.",
+        "quest_code": "micro_video_finish",
+        "title": "Tuntaskan 1 Video Mikro",
+        "description": "Selesaikan 1 pelajaran video mikro hingga tuntas untuk meraih bonus XP.",
         "xp_reward": 50,
         "target_count": 1,
     },
     {
         "quest_code": "perfect_quiz",
-        "title": "Skor Sempurna Kuis Kilat",
-        "description": "Jawab benar 2 kuis checkpoint atau kuis kilat harian.",
-        "xp_reward": 100,
-        "target_count": 2,
-    },
-    {
-        "quest_code": "zero_distraction",
-        "title": "Fokus Penuh Tanpa Pindah Tab",
-        "description": "Tuntaskan 1 sesi Focus Mode dengan 0 pelanggaran tab.",
+        "title": "Selesaikan 3 Soal Kuis Kilat",
+        "description": "Jawab tepat 3 soal dari Kuis Kilat atau checkpoint video hari ini.",
         "xp_reward": 75,
-        "target_count": 1,
+        "target_count": 3,
     },
     {
-        "quest_code": "micro_video_finish",
-        "title": "Tuntaskan 1 Video Mikro",
-        "description": "Selesaikan seluruh checkpoint pada 1 materi video mikro.",
-        "xp_reward": 60,
+        "quest_code": "pomodoro_1",
+        "title": "Selesaikan 1 Sesi Fokus Pomodoro",
+        "description": "Jalankan timer fokus Pomodoro sampai selesai agar ritme belajar terjaga.",
+        "xp_reward": 100,
         "target_count": 1,
     },
 ]
@@ -102,6 +95,11 @@ async def advance_quest_progress(
         DailyQuest.quest_code == quest_code,
     )
     quests = list((await db.execute(stmt)).scalars().all())
+    if not quests:
+        has_any_quests = (await db.execute(select(DailyQuest.id).limit(1))).scalar_one_or_none()
+        if has_any_quests is not None:
+            ensured = await ensure_daily_quests_for_today(db, user_id)
+            quests = [q for q in ensured if q.quest_code == quest_code]
     for quest in quests:
         if not quest.is_completed:
             quest.current_count = min(quest.target_count, quest.current_count + increment)

@@ -20,6 +20,7 @@ from app.domains.gamification.schemas import (
 from app.domains.shared_helpers import (
     advance_quest_progress,
     award_xp_to_user,
+    ensure_daily_quests_for_today,
     record_today_streak,
 )
 from app.models.tables import DailyQuest, FocusSession, User
@@ -134,6 +135,12 @@ async def list_daily_quests(db: AsyncSession, user_id: str) -> List[DailyQuestSc
         .order_by(DailyQuest.quest_code)
     )
     quests = list((await db.execute(stmt)).scalars().all())
+    if not quests:
+        has_any_quests = (await db.execute(select(DailyQuest.id).limit(1))).scalar_one_or_none()
+        if has_any_quests is not None:
+            quests = await ensure_daily_quests_for_today(db, user_id)
+            await db.commit()
+            quests.sort(key=lambda q: q.quest_code)
     return [serialize_quest(q) for q in quests]
 
 
