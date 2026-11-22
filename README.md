@@ -80,37 +80,37 @@ pembelajaran/
    - **Neon:** `postgresql+asyncpg://user:pass@ep-xxx.aws.neon.tech/neondb?sslmode=require`
    - **Supabase Transaction Pooler:** `postgresql+asyncpg://postgres.xxx:pass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`
    *(Engine di `apps/api/app/core/database.py` otomatis menangani parameter SSL Neon dan `statement_cache_size=0` untuk PgBouncer Supabase).*
-3. Jalankan migrasi & seeder dari terminal yang terhubung ke DB production:
+   3. Jalankan migrasi & seeder dari terminal yang terhubung ke DB production:
+      ```bash
+      alembic upgrade head
+      python -m app.seed
+      ```
+
+   ### B. Cache & Real-Time Leaderboard: Upstash Redis
+   1. Buat database Redis di **Upstash**.
+   2. Salin URL koneksi TLS `rediss://default:<token>@<endpoint>.upstash.io:6379` ke `REDIS_URL`.
+
+   ### C. Backend API (`apps/api`)
+   Deploy folder `apps/api` ke Railway / Render / Fly.io dengan start command:
    ```bash
-   alembic upgrade head
-   python -m app.seed
+   uvicorn app.main:app --host 0.0.0.0 --port $PORT
    ```
+   Set environment variables dari `apps/api/.env.example`:
+   - `DATABASE_URL`
+   - `REDIS_URL`
+   - `JWT_SECRET` (wajib acak & kuat)
+   - `CORS_ORIGINS=https://domain-vercel-anda.vercel.app`
+   - `GEMINI_API_KEY` atau `OPENAI_API_KEY` *(opsional; tanpa key pun fitur AI Upload & AI Tutor tetap bekerja menggunakan parser Bahasa Indonesia internal)*
 
-### B. Cache & Real-Time Leaderboard: Upstash Redis
-1. Buat database Redis di **Upstash**.
-2. Salin URL koneksi TLS `rediss://default:<token>@<endpoint>.upstash.io:6379` ke `REDIS_URL`.
+   ### D. Frontend (`apps/web`) ke Vercel
+   1. Hubungkan repositori ke **Vercel** (root directory tetap di root monorepo; `vercel.json` sudah mengarahkan workspace ke `apps/web`).
+   2. Tambahkan Environment Variables di Vercel Project Settings:
+      - `NEXT_PUBLIC_API_URL=https://url-backend-api-anda.com`
+      - `NEXT_PUBLIC_DEMO_MODE=false` *(ubah ke `true` hanya bila ingin preview tanpa server API)*
+   3. Deploy — `npm --workspace apps/web run build` akan menghasilkan build Next.js production siap tayang.
 
-### C. Backend API (`apps/api`)
-Deploy folder `apps/api` ke Railway / Render / Fly.io dengan start command:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-Set environment variables dari `apps/api/.env.example`:
-- `DATABASE_URL`
-- `REDIS_URL`
-- `JWT_SECRET` (wajib acak & kuat)
-- `CORS_ORIGINS=https://domain-vercel-anda.vercel.app`
-- `GEMINI_API_KEY` atau `OPENAI_API_KEY` *(opsional; tanpa key pun fitur AI Upload & AI Tutor tetap bekerja menggunakan parser Bahasa Indonesia internal)*
+   ---
 
-### D. Frontend (`apps/web`) ke Vercel
-1. Hubungkan repositori ke **Vercel** (root directory tetap di root monorepo; `vercel.json` sudah mengarahkan workspace ke `apps/web`).
-2. Tambahkan Environment Variables di Vercel Project Settings:
-   - `NEXT_PUBLIC_API_URL=https://url-backend-api-anda.com`
-   - `NEXT_PUBLIC_DEMO_MODE=false` *(ubah ke `true` hanya bila ingin preview tanpa server API)*
-3. Deploy — `npm --workspace apps/web run build` akan menghasilkan build Next.js production siap tayang.
-
----
-
-## 4. Akun Awal & Panduan Isi Data
-- **Akun Lokal Awal (0 XP, Level 1, 0 Streak):** `akun@fokussprints.id` | Sandi: `fokussprints123`
-- **Panduan Lengkap Pengisian Data per Halaman & Contoh JSON Swagger:** Lihat [docs/PANDUAN_ISI_HALAMAN.md](docs/PANDUAN_ISI_HALAMAN.md).
+   ## 4. Akun Awal & Panduan Isi Data
+   - **Akun Lokal Awal (0 XP, Level 1, 0 Streak):** `akun@fokussprints.id` | Sandi: `fokussprints123`
+   - **Panduan Lengkap Pengisian Data per Halaman & Contoh JSON Swagger:** Lihat [docs/PANDUAN_ISI_HALAMAN.md](docs/PANDUAN_ISI_HALAMAN.md).
