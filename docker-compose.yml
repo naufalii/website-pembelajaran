@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fokussprints-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fokussprints
+      POSTGRES_PASSWORD: fokussprints_dev_password
+      POSTGRES_DB: fokussprints
+    ports:
+      - "5432:5432"
+    volumes:
+      - fokussprints_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fokussprints -d fokussprints"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: fokussprints-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - fokussprints_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  fokussprints_pgdata:
+  fokussprints_redisdata:

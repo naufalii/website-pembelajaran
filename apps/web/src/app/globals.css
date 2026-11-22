@@ -1,0 +1,107 @@
+/* Hallmark · shape: app screen · genre: playful · theme: Dark Earthy Neobrutalism (by request) · v2.0.0 */
+/* Critique: Dark earthy forest surfaces (#0F2A24/#173B32) paired with tactile 2.5px ink borders, Sand Gold (#D8C28A) CTA accents, and crisp Warm Cream (#F2EEE3) flashcard surfaces. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0F2A24;
+  --color-surface: #173B32;
+  --color-surface-elevated: #1F4D42;
+  --color-text: #F2EEE3;
+  --color-accent: #D8C28A;
+  --color-accent-ink: #061310;
+  --color-muted: #8FA39B;
+  --color-ink: #061310;
+  --color-danger: #E05A47;
+  --color-success: #34D399;
+
+  --shadow-brutal-sm: 4px 4px 0px 0px #061310;
+  --shadow-brutal-md: 6px 6px 0px 0px #061310;
+  --shadow-brutal-hover: 6px 6px 0px 0px #061310;
+  --shadow-brutal-gold: 4px 4px 0px 0px #D8C28A;
+  --shadow-brutal-danger: 6px 6px 0px 0px #E05A47;
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: var(--color-ink);
+}
+
+/* Custom Dark Earthy Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+  border-left: 2px solid var(--color-ink);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-elevated);
+  border: 2px solid var(--color-ink);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* Focus-visible instant untuk aksesibilitas keyboard */
+:focus-visible {
+  outline: 2.5px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Tactile Neobrutalism Press Interaction (tanpa transition-all) */
+.brutal-press {
+  transition-property: transform, box-shadow, background-color, border-color, color;
+  transition-duration: 140ms;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.brutal-press:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-brutal-hover);
+}
+
+.brutal-press:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+/* Dukungan perspektif 3D untuk Flashcard Flip */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
