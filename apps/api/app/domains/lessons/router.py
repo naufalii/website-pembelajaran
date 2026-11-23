@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.domains.auth.service import get_current_user
+from app.domains.auth.service import get_current_user, get_optional_user
 from app.domains.courses.schemas import LessonSummarySchema
 from app.domains.lessons.schemas import (
     AiDocumentSchema,
@@ -127,10 +127,10 @@ async def chat_ai_tutor(
 @router.get("/{lesson_id}", response_model=LessonSummarySchema, summary="Detail pelajaran mikro & checkpoint")
 async def get_lesson(
     lesson_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ) -> LessonSummarySchema:
-    return await get_lesson_detail(db, lesson_id, current_user.id)
+    return await get_lesson_detail(db, lesson_id, current_user.id if current_user else None)
 
 
 @router.post("/{lesson_id}/progress", response_model=LessonProgressResponse, summary="Simpan progres tonton & checkpoint")

@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.domains.auth.schemas import UserProfileSchema
-from app.domains.courses.service import get_course_detail
+from app.domains.courses.schemas import CourseDetailSchema
+from app.domains.courses.service import serialize_lesson
 from app.domains.gamification.service import (
     get_active_focus_session,
     get_leaderboard,
@@ -22,9 +24,19 @@ from app.domains.progress.schemas import (
 )
 from app.domains.quizzes.service import serialize_quiz
 from app.domains.shared_helpers import user_to_profile_dict
-from app.models.tables import AiDocument, Course, FocusSession, Quiz, QuizAttempt, User, UserStreak
+from app.models.tables import (
+    AiDocument,
+    Course,
+    FocusSession,
+    LessonProgress,
+    Quiz,
+    QuizAttempt,
+    User,
+    UserStreak,
+)
 
 DAY_LABELS_ID = ["S", "S", "R", "K", "J", "S", "M"]
+RECENT_ATTEMPTS_LIMIT = 15
 
 
 async def get_streak_calendar(db: AsyncSession, user_id: str, days: int = 21) -> List[StreakDaySchema]:
@@ -63,18 +75,64 @@ async def get_streak_calendar(db: AsyncSession, user_id: str, days: int = 21) ->
 
 
 async def get_dashboard_aggregate(db: AsyncSession, user: User) -> DashboardResponseSchema:
+    # Muat kursus aktif + seluruh pelajarannya dalam 1 round-trip SQL tunggal (LEFT JOIN)
+    first_course_id_sq = (
+        select(Course.id)
+        .where(Course.is_published.is_(True))
+        .order_by(Course.created_at)
+        .limit(1)
+        .scalar_subquery()
+    )
     first_course = (
-        await db.execute(select(Course).where(Course.is_published.is_(True)).order_by(Course.created_at).limit(1))
-    ).scalar_one_or_none()
-    active_course = await get_course_detail(db, first_course.id, user.id) if first_course else None
+        await db.execute(
+            select(Course)
+            .where(Course.id == first_course_id_sq)
+            .options(joinedload(Course.lessons))
+        )
+    ).unique().scalar_one_or_none()
 
+    active_course: Optional[CourseDetailSchema] = None
+    if first_course is not None:
+        sorted_lessons = sorted(first_course.lessons, key=lambda l: l.order_index)
+        lesson_ids = [l.id for l in sorted_lessons]
+        progress_map: Dict[str, LessonProgress] = {}
+        if lesson_ids:
+            progress_rows = (
+                await db.execute(
+                    select(LessonProgress).where(
+                        LessonProgress.user_id == user.id,
+                        LessonProgress.lesson_id.in_(lesson_ids),
+                    )
+                )
+            ).scalars().all()
+            progress_map = {row.lesson_id: row for row in progress_rows}
+
+        lessons_out = [serialize_lesson(lesson, progress_map.get(lesson.id)) for lesson in sorted_lessons]
+        completed_lessons = sum(1 for item in lessons_out if item.is_completed)
+        active_course = CourseDetailSchema(
+            id=first_course.id,
+            slug=first_course.slug,
+            title=first_course.title,
+            description=first_course.description,
+            category=first_course.category,
+            difficulty=first_course.difficulty,
+            estimated_minutes=first_course.estimated_minutes,
+            lesson_count=len(lessons_out),
+            completed_lessons=completed_lessons,
+            lessons=lessons_out,
+        )
+
+    # Ambil 1 kuis harian (prioritas multiple_choice, fallback tipe lain dalam 1 query terurut)
     daily_quiz_row = (
         await db.execute(
-            select(Quiz).where(Quiz.quiz_type == "multiple_choice").order_by(Quiz.created_at).limit(1)
+            select(Quiz)
+            .order_by(
+                case((Quiz.quiz_type == "multiple_choice", 0), else_=1),
+                Quiz.created_at,
+            )
+            .limit(1)
         )
     ).scalar_one_or_none()
-    if daily_quiz_row is None:
-        daily_quiz_row = (await db.execute(select(Quiz).limit(1))).scalar_one_or_none()
 
     streak_calendar = await get_streak_calendar(db, user.id, days=21)
     leaderboard = await get_leaderboard(db, user, limit=5)
@@ -93,46 +151,104 @@ async def get_dashboard_aggregate(db: AsyncSession, user: User) -> DashboardResp
 
 
 async def get_profile_overview(db: AsyncSession, user: User) -> ProfileOverviewSchema:
-    sessions = (
-        await db.execute(select(FocusSession).where(FocusSession.user_id == user.id))
-    ).scalars().all()
-    completed_sessions = [s for s in sessions if s.status == "completed"]
-    total_pomodoro = len(completed_sessions)
-    total_focus_minutes = sum(s.duration_minutes for s in completed_sessions)
-    total_violations = sum(s.tab_violations for s in sessions)
-
-    attempts = (
-        await db.execute(
-            select(QuizAttempt)
-            .where(QuizAttempt.user_id == user.id)
-            .order_by(QuizAttempt.attempted_at.desc())
+    """
+    Optimasi 2 round-trip SQL (tanpa full-table scan Python dan tanpa N+1 query):
+    1. Satu query agregat gabungan (FocusSession + QuizAttempt + AiDocument) langsung di SQL.
+    2. Satu query LEFT OUTER JOIN (QuizAttempt + Quiz.title) terbatas LIMIT 15 terbaru.
+    """
+    completed_sessions_sq = (
+        select(func.count(FocusSession.id))
+        .where(FocusSession.user_id == user.id, FocusSession.status == "completed")
+        .scalar_subquery()
+    )
+    focus_minutes_sq = (
+        select(func.coalesce(func.sum(FocusSession.duration_minutes), 0))
+        .where(FocusSession.user_id == user.id, FocusSession.status == "completed")
+        .scalar_subquery()
+    )
+    tab_violations_sq = (
+        select(func.coalesce(func.sum(FocusSession.tab_violations), 0))
+        .where(FocusSession.user_id == user.id)
+        .scalar_subquery()
+    )
+    clean_deep_focus_sq = (
+        select(func.count(FocusSession.id))
+        .where(
+            FocusSession.user_id == user.id,
+            FocusSession.status == "completed",
+            FocusSession.tab_violations == 0,
         )
-    ).scalars().all()
-    total_quizzes = len(attempts)
-    correct_quizzes = sum(1 for a in attempts if a.is_correct)
+        .scalar_subquery()
+    )
+    total_quizzes_sq = (
+        select(func.count(QuizAttempt.id))
+        .where(QuizAttempt.user_id == user.id)
+        .scalar_subquery()
+    )
+    correct_quizzes_sq = (
+        select(func.count(QuizAttempt.id))
+        .where(QuizAttempt.user_id == user.id, QuizAttempt.is_correct.is_(True))
+        .scalar_subquery()
+    )
+    ai_doc_count_sq = (
+        select(func.count(AiDocument.id))
+        .where(AiDocument.user_id == user.id)
+        .scalar_subquery()
+    )
+
+    # Round-trip 1: seluruh statistik numerik dalam 1 query SQL
+    agg_row = (
+        await db.execute(
+            select(
+                completed_sessions_sq.label("total_pomodoro"),
+                focus_minutes_sq.label("total_focus_minutes"),
+                tab_violations_sq.label("total_violations"),
+                clean_deep_focus_sq.label("clean_focus_count"),
+                total_quizzes_sq.label("total_quizzes"),
+                correct_quizzes_sq.label("correct_quizzes"),
+                ai_doc_count_sq.label("ai_doc_count"),
+            )
+        )
+    ).one()
+
+    total_pomodoro = int(agg_row.total_pomodoro or 0)
+    total_focus_minutes = int(agg_row.total_focus_minutes or 0)
+    total_violations = int(agg_row.total_violations or 0)
+    has_clean_focus = int(agg_row.clean_focus_count or 0) > 0
+    total_quizzes = int(agg_row.total_quizzes or 0)
+    correct_quizzes = int(agg_row.correct_quizzes or 0)
+    ai_doc_count = int(agg_row.ai_doc_count or 0)
     accuracy = int(round((correct_quizzes / total_quizzes) * 100)) if total_quizzes > 0 else 0
 
-    quiz_ids = [a.quiz_id for a in attempts[:10]]
-    quizzes_map: Dict[str, Quiz] = {}
-    if quiz_ids:
-        quiz_rows = (await db.execute(select(Quiz).where(Quiz.id.in_(quiz_ids)))).scalars().all()
-        quizzes_map = {q.id: q for q in quiz_rows}
+    # Round-trip 2: 15 riwayat kuis terbaru dengan LEFT JOIN judul kuis (tanpa N+1 & tanpa JSONB)
+    recent_rows = (
+        await db.execute(
+            select(
+                QuizAttempt.id,
+                QuizAttempt.is_correct,
+                QuizAttempt.xp_earned,
+                QuizAttempt.multiplier_applied,
+                QuizAttempt.attempted_at,
+                Quiz.title.label("quiz_title"),
+            )
+            .outerjoin(Quiz, QuizAttempt.quiz_id == Quiz.id)
+            .where(QuizAttempt.user_id == user.id)
+            .order_by(QuizAttempt.attempted_at.desc())
+            .limit(RECENT_ATTEMPTS_LIMIT)
+        )
+    ).all()
 
     recent_attempts = [
         QuizAttemptSummarySchema(
-            id=a.id,
-            quiz_title=quizzes_map[a.quiz_id].title if a.quiz_id in quizzes_map else "Kuis Kilat",
-            is_correct=a.is_correct,
-            xp_earned=a.xp_earned,
-            multiplier_applied=a.multiplier_applied,
-            attempted_at=a.attempted_at.isoformat(),
+            id=row.id,
+            quiz_title=row.quiz_title or "Kuis Kilat",
+            is_correct=bool(row.is_correct),
+            xp_earned=int(row.xp_earned),
+            multiplier_applied=int(row.multiplier_applied),
+            attempted_at=row.attempted_at.isoformat(),
         )
-        for a in attempts[:8]
+        for row in recent_rows
     ]
-
-    ai_doc_count = len(
-        (await db.execute(select(AiDocument.id).where(AiDocument.user_id == user.id))).scalars().all()
-    )
 
     badges = [
         BadgeItemSchema(
@@ -147,8 +263,8 @@ async def get_profile_overview(db: AsyncSession, user: User) -> ProfileOverviewS
             code="deep_focus_master",
             title="Arsitek Deep Focus",
             description="Selesaikan sesi Focus Mode 25 menit dengan multiplier 2x aktif.",
-            unlocked=any(s.status == "completed" and s.tab_violations == 0 for s in sessions),
-            progress_label="Aktif" if any(s.status == "completed" and s.tab_violations == 0 for s in sessions) else "0/1 Sesi",
+            unlocked=has_clean_focus,
+            progress_label="Aktif" if has_clean_focus else "0/1 Sesi",
             tier="mint",
         ),
         BadgeItemSchema(

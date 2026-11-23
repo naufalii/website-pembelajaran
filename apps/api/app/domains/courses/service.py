@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -18,7 +18,9 @@ from app.domains.courses.schemas import (
 from app.models.tables import Course, Lesson, LessonProgress
 
 
-async def _get_progress_map(db: AsyncSession, user_id: str) -> Dict[str, LessonProgress]:
+async def _get_progress_map(db: AsyncSession, user_id: Optional[str]) -> Dict[str, LessonProgress]:
+    if not user_id:
+        return {}
     rows = (
         await db.execute(select(LessonProgress).where(LessonProgress.user_id == user_id))
     ).scalars().all()
@@ -43,7 +45,7 @@ def serialize_lesson(lesson: Lesson, progress: LessonProgress | None) -> LessonS
     )
 
 
-async def list_courses(db: AsyncSession, user_id: str) -> List[CourseSummarySchema]:
+async def list_courses(db: AsyncSession, user_id: Optional[str] = None) -> List[CourseSummarySchema]:
     stmt = (
         select(Course)
         .where(Course.is_published.is_(True))
@@ -76,7 +78,9 @@ async def list_courses(db: AsyncSession, user_id: str) -> List[CourseSummarySche
     return results
 
 
-async def get_course_detail(db: AsyncSession, course_id: str, user_id: str) -> CourseDetailSchema:
+async def get_course_detail(
+    db: AsyncSession, course_id: str, user_id: Optional[str] = None
+) -> CourseDetailSchema:
     stmt = (
         select(Course)
         .where(Course.id == course_id)

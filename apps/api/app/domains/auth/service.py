@@ -17,7 +17,6 @@ from app.core.security import (
 )
 from app.domains.auth.schemas import AuthTokenResponse, LoginRequest, RegisterRequest, UserProfileSchema
 from app.domains.shared_helpers import (
-    DEFAULT_DEMO_EMAIL,
     user_to_profile_dict,
 )
 from app.models.tables import User
@@ -96,38 +95,56 @@ async def refresh_user_token(db: AsyncSession, refresh_token: str) -> AuthTokenR
     )
 
 
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """
+    Autentikasi opsional untuk endpoint katalog publik (Courses, Lessons, Quizzes).
+    Jika Bearer token valid, kembalikan pengguna agar progres personal ikut ditampilkan.
+    Jika tidak ada token atau token kedaluwarsa/tidak valid, kembalikan None tanpa 401.
+    """
+    if credentials is None or not credentials.credentials:
+        return None
+    decoded = decode_token(credentials.credentials)
+    if not decoded or decoded.get("type") != "access":
+        return None
+    user_id = str(decoded.get("sub", ""))
+    if not user_id:
+        return None
+    return (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
-    Ambil user dari JWT Bearer token. Jika tidak ada header Authorization (mode eksplorasi cepat/demo),
-    fallback otomatis ke akun bersih awal yang telah di-seed (`akun@fokussprints.id`).
+    Ambil pengguna aktif dari JWT Bearer token.
+    Endpoint personal wajib menyertakan token valid dan mengembalikan 401 jika belum masuk
+    atau sesi sudah kedaluwarsa.
     """
-    if credentials is not None and credentials.credentials:
-        decoded = decode_token(credentials.credentials)
-        if not decoded or decoded.get("type") != "access":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token akses tidak valid atau sudah kedaluwarsa.",
-            )
-        user_id = str(decoded.get("sub", ""))
-        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Akun pengguna tidak ditemukan.",
-            )
-        return user
-
-    demo_user = (
-        await db.execute(select(User).where(User.email == DEFAULT_DEMO_EMAIL))
-    ).scalar_one_or_none()
-    if demo_user is None:
-        demo_user = (await db.execute(select(User).limit(1))).scalar_one_or_none()
-    if demo_user is None:
+    if credentials is None or not credentials.credentials:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Belum ada pengguna terdaftar. Jalankan database seeder atau daftar akun baru.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Kamu belum masuk akun. Silakan masuk terlebih dahulu.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    return demo_user
+
+    decoded = decode_token(credentials.credentials)
+    if not decoded or decoded.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesi masuk telah berakhir atau token tidak valid. Silakan masuk kembali.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = str(decoded.get("sub", ""))
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akun pengguna tidak ditemukan. Silakan masuk kembali.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user

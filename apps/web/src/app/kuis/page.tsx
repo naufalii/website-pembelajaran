@@ -4,12 +4,15 @@ import * as React from "react";
 import Link from "next/link";
 import { BookOpen, Clock, Layers, Play, Zap } from "lucide-react";
 import type { QuizType } from "@fokussprints/shared";
+import { AuthRequiredCard } from "@/components/auth/auth-required-card";
 import { QuizCheckpointPanel } from "@/components/dashboard/quiz-checkpoint-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isUnauthorizedError } from "@/lib/api-client";
 import { useCoursesQuery, useQuizzesQuery } from "@/lib/queries";
+import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 
 const TYPE_FILTERS: Array<{ id: "all" | QuizType; label: string }> = [
@@ -20,19 +23,38 @@ const TYPE_FILTERS: Array<{ id: "all" | QuizType; label: string }> = [
 ];
 
 export default function KuisSprintPage() {
+  const hydrated = useAuthStore((s) => s.hydrated);
   const [filterType, setFilterType] = React.useState<"all" | QuizType>("all");
   const [activeQuizIndex, setActiveQuizIndex] = React.useState(0);
 
-  const { data: courses = [], isLoading: loadingCourses } = useCoursesQuery();
-  const { data: quizzes = [], isLoading: loadingQuizzes } = useQuizzesQuery(
-    filterType === "all" ? undefined : filterType
-  );
+  const {
+    data: courses = [],
+    isLoading: loadingCourses,
+    error: coursesError,
+  } = useCoursesQuery();
+  const {
+    data: quizzes = [],
+    isLoading: loadingQuizzes,
+    error: quizzesError,
+  } = useQuizzesQuery(filterType === "all" ? undefined : filterType);
 
   React.useEffect(() => {
     setActiveQuizIndex(0);
   }, [filterType]);
 
   const activeQuiz = quizzes[activeQuizIndex] ?? quizzes[0];
+
+  if (isUnauthorizedError(quizzesError) || isUnauthorizedError(coursesError)) {
+    return (
+      <div className="py-6">
+        <AuthRequiredCard
+          sessionExpired
+          featureName="Katalog Modul & Kuis Sprint"
+          showCatalogLink={false}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -66,7 +88,7 @@ export default function KuisSprintPage() {
       {/* Main Split: Active Quiz Runner + Quiz Queue */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)] items-start">
         <div className="space-y-4">
-          {loadingQuizzes ? (
+          {!hydrated || loadingQuizzes ? (
             <Skeleton className="h-[420px] w-full rounded-2xl" />
           ) : activeQuiz ? (
             <QuizCheckpointPanel
@@ -166,7 +188,7 @@ export default function KuisSprintPage() {
           </h3>
         </div>
 
-        {loadingCourses ? (
+        {!hydrated || loadingCourses ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Skeleton className="h-44 rounded-2xl" />
             <Skeleton className="h-44 rounded-2xl" />

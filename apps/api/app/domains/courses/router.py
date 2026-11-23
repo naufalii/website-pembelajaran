@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.domains.auth.service import get_current_user
+from app.domains.auth.service import get_current_user, get_optional_user
 from app.domains.courses.schemas import (
     CourseDetailSchema,
     CourseSummarySchema,
@@ -20,10 +20,10 @@ router = APIRouter(prefix="/courses", tags=["2. Courses"])
 
 @router.get("", response_model=List[CourseSummarySchema], summary="Daftar kursus micro-learning")
 async def get_courses(
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ) -> List[CourseSummarySchema]:
-    return await list_courses(db, current_user.id)
+    return await list_courses(db, current_user.id if current_user else None)
 
 
 @router.post("", response_model=CourseSummarySchema, status_code=201, summary="Tambah kursus micro-learning baru")
@@ -39,7 +39,7 @@ async def post_course(
 @router.get("/{course_id}", response_model=CourseDetailSchema, summary="Detail kursus beserta video mikro")
 async def get_course(
     course_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ) -> CourseDetailSchema:
-    return await get_course_detail(db, course_id, current_user.id)
+    return await get_course_detail(db, course_id, current_user.id if current_user else None)

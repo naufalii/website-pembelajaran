@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Flame, Lock, Menu, Play, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { Flame, Lock, LogIn, Menu, Play, ShieldCheck } from "lucide-react";
 import type { UserProfile } from "@fokussprints/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,41 +61,52 @@ export function TopStatusBar({
           </div>
         </div>
 
-        {/* Kanan: Badge Streak + Tombol/Badge FOCUS MODE */}
+        {/* Kanan: Badge Streak + Tombol/Badge FOCUS MODE atau Masuk Akun */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <Badge variant="gold" className="h-10 px-3.5 text-xs sm:text-sm">
-            <Flame className="h-4 w-4 fill-terracotta text-ink" aria-hidden="true" />
-            <span>{streakCount} Hari Streak</span>
-          </Badge>
+          {user ? (
+            <>
+              <Badge variant="gold" className="h-10 px-3.5 text-xs sm:text-sm">
+                <Flame className="h-4 w-4 fill-terracotta text-ink" aria-hidden="true" />
+                <span>{streakCount} Hari Streak</span>
+              </Badge>
 
-          {isFocusModeActive ? (
-            <div
-              role="status"
-              aria-live="polite"
-              className="inline-flex h-10 items-center gap-2 rounded-xl border-[2.5px] border-ink bg-terracotta px-3.5 font-display text-xs sm:text-sm font-extrabold text-ink shadow-brutal-sm"
-            >
-              <Lock className="h-4 w-4 shrink-0 stroke-[2.5]" aria-hidden="true" />
-              <span>
-                FOCUS MODE AKTIF • {xpMultiplier}x XP
-              </span>
-              <span className="rounded-lg border-2 border-ink bg-cream px-2 py-0.5 font-mono text-xs font-extrabold tabular-nums text-ink">
-                {formatTimer(remainingSeconds)}
-              </span>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="surface"
-              onClick={() => void handleQuickFocus()}
-              disabled={startFocusMutation.isPending}
-              className="h-10 border-sand/80"
-            >
-              {startFocusMutation.isPending ? (
-                <ShieldCheck className="h-4 w-4 text-sand" aria-hidden="true" />
+              {isFocusModeActive ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border-[2.5px] border-ink bg-terracotta px-3.5 font-display text-xs sm:text-sm font-extrabold text-ink shadow-brutal-sm"
+                >
+                  <Lock className="h-4 w-4 shrink-0 stroke-[2.5]" aria-hidden="true" />
+                  <span>
+                    FOCUS MODE AKTIF • {xpMultiplier}x XP
+                  </span>
+                  <span className="rounded-lg border-2 border-ink bg-cream px-2 py-0.5 font-mono text-xs font-extrabold tabular-nums text-ink">
+                    {formatTimer(remainingSeconds)}
+                  </span>
+                </div>
               ) : (
-                <Play className="h-4 w-4 fill-sand text-sand" aria-hidden="true" />
+                <Button
+                  type="button"
+                  variant="surface"
+                  onClick={() => void handleQuickFocus()}
+                  disabled={startFocusMutation.isPending}
+                  className="h-10 border-sand/80"
+                >
+                  {startFocusMutation.isPending ? (
+                    <ShieldCheck className="h-4 w-4 text-sand" aria-hidden="true" />
+                  ) : (
+                    <Play className="h-4 w-4 fill-sand text-sand" aria-hidden="true" />
+                  )}
+                  <span className="font-mono">Mulai Fokus 25:00</span>
+                </Button>
               )}
-              <span className="font-mono">Mulai Fokus 25:00</span>
+            </>
+          ) : (
+            <Button asChild size="sm" className="h-10">
+              <Link href="/profil?tab=masuk">
+                <LogIn className="h-4 w-4" aria-hidden="true" />
+                <span>Masuk Akun</span>
+              </Link>
             </Button>
           )}
         </div>

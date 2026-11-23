@@ -77,6 +77,9 @@ class Course(Base):
 
 class Lesson(Base):
     __tablename__ = "lessons"
+    __table_args__ = (
+        Index("ix_lessons_course_order", "course_id", "order_index"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     course_id: Mapped[str] = mapped_column(
@@ -121,6 +124,9 @@ class Quiz(Base):
 
 class FocusSession(Base):
     __tablename__ = "focus_sessions"
+    __table_args__ = (
+        Index("ix_focus_sessions_user_status", "user_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     user_id: Mapped[str] = mapped_column(
@@ -138,6 +144,9 @@ class FocusSession(Base):
 
 class QuizAttempt(Base):
     __tablename__ = "quiz_attempts"
+    __table_args__ = (
+        Index("ix_quiz_attempts_user_attempted_at", "user_id", "attempted_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     user_id: Mapped[str] = mapped_column(
@@ -160,6 +169,9 @@ class QuizAttempt(Base):
 
 class DailyQuest(Base):
     __tablename__ = "daily_quests"
+    __table_args__ = (
+        Index("ix_daily_quests_user_date", "user_id", "quest_date"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     user_id: Mapped[str] = mapped_column(
@@ -199,6 +211,9 @@ class UserStreak(Base):
 
 class AiDocument(Base):
     __tablename__ = "ai_documents"
+    __table_args__ = (
+        Index("ix_ai_documents_user_created_at", "user_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     user_id: Mapped[str] = mapped_column(

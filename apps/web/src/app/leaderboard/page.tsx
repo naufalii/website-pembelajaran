@@ -2,22 +2,67 @@
 
 import * as React from "react";
 import { Crown, Flame, RefreshCw, Trophy } from "lucide-react";
+import { AuthRequiredCard } from "@/components/auth/auth-required-card";
 import { BrutalAvatar } from "@/components/icons/brutal-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isUnauthorizedError } from "@/lib/api-client";
 import { useLeaderboardQuery } from "@/lib/queries";
+import { useAuthStore } from "@/stores/auth-store";
 import { cn, formatNumberID } from "@/lib/utils";
 
 export default function LeaderboardPage() {
-  const { data, isLoading, isError, refetch } = useLeaderboardQuery();
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const token = useAuthStore((s) => s.token);
+  const sessionExpired = useAuthStore((s) => s.sessionExpired);
+  const { data, isLoading, isError, error, refetch } = useLeaderboardQuery();
 
-  if (isLoading) {
+  if (!hydrated) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-6">
+        <div>
+          <h2 className="font-display text-2xl font-extrabold tracking-tight text-cream">
+            Papan Peringkat Mingguan Real-Time
+          </h2>
+          <p className="text-sm text-sage">
+            Peringkat XP aktif diperbarui otomatis setiap kali kamu menyelesaikan kuis, misi, dan sesi Pomodoro.
+          </p>
+        </div>
         <Skeleton className="h-56 w-full rounded-2xl" />
-        <Skeleton className="h-80 w-full rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (!token || isUnauthorizedError(error)) {
+    return (
+      <div className="py-6">
+        <AuthRequiredCard
+          sessionExpired={sessionExpired || isUnauthorizedError(error)}
+          featureName="Papan Peringkat Mingguan"
+          showCatalogLink
+        />
+      </div>
+    );
+  }
+
+  if (isLoading && !data) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-2xl font-extrabold tracking-tight text-cream">
+              Papan Peringkat Mingguan Real-Time
+            </h2>
+            <p className="text-sm text-sage">
+              Peringkat XP aktif diperbarui otomatis setiap kali kamu menyelesaikan kuis, misi, dan sesi Pomodoro.
+            </p>
+          </div>
+          <Skeleton className="h-8 w-36 rounded-xl" />
+        </div>
+        <Skeleton className="h-56 w-full rounded-2xl" />
+        <Skeleton className="h-72 w-full rounded-2xl" />
       </div>
     );
   }

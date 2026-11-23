@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.database import IS_VERCEL
 from app.domains.auth.router import router as auth_router
 from app.domains.courses.router import router as courses_router
 from app.domains.gamification.router import router as gamification_router
@@ -21,7 +22,10 @@ from app.services.redis_service import redis_service
 async def lifespan(app: FastAPI):
     _ = app
     await redis_service.connect()
-    await init_db_and_seed()
+    if not IS_VERCEL:
+        # Di lokal/dev, pastikan tabel & akun awal tersedia; di Vercel serverless,
+        # hindari DDL create_all() + full-table scan pada setiap cold start.
+        await init_db_and_seed()
     yield
     await redis_service.close()
 

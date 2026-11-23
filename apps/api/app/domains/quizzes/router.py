@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.domains.auth.service import get_current_user
+from app.domains.auth.service import get_current_user, get_optional_user
 from app.domains.quizzes.schemas import (
     CreateQuizRequest,
     QuizItemSchema,
@@ -24,11 +24,11 @@ from app.models.tables import User
 router = APIRouter(prefix="/quizzes", tags=["4. Quizzes"])
 
 
-@router.get("", response_model=List[QuizItemSchema], summary="Daftar kuis interaktif JSONB")
+@router.get("", response_model=List[QuizItemSchema], summary="Daftar kuis interaktif publik")
 async def get_quizzes(
     lesson_id: Optional[str] = Query(default=None),
     quiz_type: Optional[str] = Query(default=None),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ) -> List[QuizItemSchema]:
     _ = current_user
@@ -48,7 +48,7 @@ async def post_quiz(
 @router.get("/{quiz_id}", response_model=QuizItemSchema, summary="Detail soal kuis berdasarkan ID")
 async def get_quiz(
     quiz_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ) -> QuizItemSchema:
     _ = current_user

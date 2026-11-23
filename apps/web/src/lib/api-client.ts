@@ -29,30 +29,83 @@ import {
   type QuizSubmitResponse,
 } from "@fokussprints/shared";
 import { z } from "zod";
+import { readStoredAuthToken, useAuthStore } from "@/stores/auth-store";
 import { demoStore } from "./demo-store";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
-let authTokenMemory: string | null = null;
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string;
+  readonly isUnauthorized: boolean;
 
-export function setClientAuthToken(token: string | null): void {
-  authTokenMemory = token;
-  if (typeof window !== "undefined") {
-    if (token) {
-      window.localStorage.setItem("fokussprints_token", token);
-    } else {
-      window.localStorage.removeItem("fokussprints_token");
-    }
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+    this.isUnauthorized = status === 401;
   }
 }
 
-export function getClientAuthToken(): string | null {
-  if (authTokenMemory) return authTokenMemory;
-  if (typeof window !== "undefined") {
-    authTokenMemory = window.localStorage.getItem("fokussprints_token");
+export function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiError && error.isUnauthorized;
+}
+
+export function isAbortError(error: unknown): boolean {
+  return (
+    (typeof DOMException !== "undefined" &&
+      error instanceof DOMException &&
+      error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
+export function setClientAuthToken(
+  token: string | null,
+  refreshToken?: string | null
+): void {
+  if (token) {
+    useAuthStore.getState().setSession(token, refreshToken);
+  } else {
+    useAuthStore.getState().clearSession("logout");
   }
-  return authTokenMemory;
+}
+
+export function clearClientAuthToken(reason: "expired" | "logout" = "logout"): void {
+  useAuthStore.getState().clearSession(reason);
+}
+
+export function getClientAuthToken(): string | null {
+  return readStoredAuthToken();
+}
+
+function parseErrorDetail(rawText: string, status: number): string {
+  if (rawText) {
+    try {
+      const parsed: unknown = JSON.parse(rawText);
+      if (parsed && typeof parsed === "object" && "detail" in parsed) {
+        const detail = (parsed as { detail: unknown }).detail;
+        if (typeof detail === "string" && detail.trim()) {
+          return detail.trim();
+        }
+        if (Array.isArray(detail) && detail.length > 0) {
+          const first = detail[0];
+          if (first && typeof first === "object" && "msg" in first) {
+            return String((first as { msg: unknown }).msg);
+          }
+        }
+      }
+    } catch {
+      return rawText.trim();
+    }
+  }
+
+  if (status === 401) {
+    return "Sesi masuk telah berakhir atau kamu belum masuk akun.";
+  }
+  return `Permintaan gagal diproses (${status}).`;
 }
 
 const LessonProgressResponseSchema = z.object({
@@ -67,39 +120,62 @@ interface ZodParser<T> {
   parse: (data: unknown) => T;
 }
 
+interface RequestOptions extends RequestInit {
+  skipAuthHeader?: boolean;
+}
+
 async function requestWithFallback<T>(
   path: string,
-  options: RequestInit,
+  options: RequestOptions,
   schema: ZodParser<T>,
   demoFallback: () => T | Promise<T>
 ): Promise<T> {
-  const token = getClientAuthToken();
-  const headers = new Headers(options.headers);
+  const { skipAuthHeader, ...fetchOptions } = options;
+  const token = skipAuthHeader ? null : getClientAuthToken();
+  const headers = new Headers(fetchOptions.headers);
+
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  if (!(options.body instanceof FormData) && !headers.has("Content-Type") && options.body) {
+  if (
+    !(fetchOptions.body instanceof FormData) &&
+    !headers.has("Content-Type") &&
+    fetchOptions.body
+  ) {
     headers.set("Content-Type", "application/json");
   }
 
   try {
     const response = await fetch(`${API_BASE}/api/v1${path}`, {
-      ...options,
+      ...fetchOptions,
       headers,
       cache: "no-store",
     });
 
     if (!response.ok) {
       const errorText = await response.text();
+      const detail = parseErrorDetail(errorText, response.status);
+
+      if (response.status === 401) {
+        // Hapus token JWT usang dari localStorage & state auth agar tidak terus dikirim ulang
+        if (!skipAuthHeader) {
+          clearClientAuthToken("expired");
+        }
+        throw new ApiError(401, detail);
+      }
+
       if (DEMO_ENABLED && response.status >= 500) {
         return await demoFallback();
       }
-      throw new Error(errorText || `Permintaan gagal (${response.status})`);
+      throw new ApiError(response.status, detail);
     }
 
     const rawJson: unknown = await response.json();
     return schema.parse(rawJson);
   } catch (error) {
+    if (isAbortError(error) || error instanceof ApiError) {
+      throw error;
+    }
     if (DEMO_ENABLED) {
       return await demoFallback();
     }
@@ -108,38 +184,38 @@ async function requestWithFallback<T>(
 }
 
 export const apiClient = {
-  getDashboard(): Promise<DashboardResponse> {
+  getDashboard(signal?: AbortSignal): Promise<DashboardResponse> {
     return requestWithFallback(
       "/progress/dashboard",
-      { method: "GET" },
+      { method: "GET", signal },
       DashboardResponseSchema,
       () => demoStore.getDashboard()
     );
   },
 
-  getCourses(): Promise<CourseSummary[]> {
+  getCourses(signal?: AbortSignal): Promise<CourseSummary[]> {
     return requestWithFallback(
       "/courses",
-      { method: "GET" },
+      { method: "GET", signal },
       z.array(CourseSummarySchema),
       () => demoStore.getCourses()
     );
   },
 
-  getCourseDetail(courseId: string): Promise<CourseDetail> {
+  getCourseDetail(courseId: string, signal?: AbortSignal): Promise<CourseDetail> {
     return requestWithFallback(
       `/courses/${courseId}`,
-      { method: "GET" },
+      { method: "GET", signal },
       CourseDetailSchema,
       () => demoStore.getCourseDetail(courseId)
     );
   },
 
-  getQuizzes(quizType?: string): Promise<QuizItem[]> {
+  getQuizzes(quizType?: string, signal?: AbortSignal): Promise<QuizItem[]> {
     const query = quizType ? `?quiz_type=${encodeURIComponent(quizType)}` : "";
     return requestWithFallback(
       `/quizzes${query}`,
-      { method: "GET" },
+      { method: "GET", signal },
       z.array(QuizItemSchema),
       () => demoStore.getQuizzes(quizType)
     );
@@ -176,10 +252,10 @@ export const apiClient = {
     );
   },
 
-  getLeaderboard(): Promise<LeaderboardResponse> {
+  getLeaderboard(signal?: AbortSignal): Promise<LeaderboardResponse> {
     return requestWithFallback(
       "/gamification/leaderboard",
-      { method: "GET" },
+      { method: "GET", signal },
       LeaderboardResponseSchema,
       () => demoStore.getLeaderboard()
     );
@@ -224,10 +300,10 @@ export const apiClient = {
     );
   },
 
-  getAiDocuments(): Promise<AiDocument[]> {
+  getAiDocuments(signal?: AbortSignal): Promise<AiDocument[]> {
     return requestWithFallback(
       "/lessons/ai/documents",
-      { method: "GET" },
+      { method: "GET", signal },
       z.array(AiDocumentSchema),
       () => demoStore.getAiDocuments()
     );
@@ -289,10 +365,10 @@ export const apiClient = {
     );
   },
 
-  getProfileOverview(): Promise<ProfileOverview> {
+  getProfileOverview(signal?: AbortSignal): Promise<ProfileOverview> {
     return requestWithFallback(
       "/progress/profile",
-      { method: "GET" },
+      { method: "GET", signal },
       ProfileOverviewSchema,
       () => demoStore.getProfileOverview()
     );
@@ -304,6 +380,7 @@ export const apiClient = {
       {
         method: "POST",
         body: JSON.stringify({ email, password }),
+        skipAuthHeader: true,
       },
       AuthTokenResponseSchema,
       () => demoStore.loginDemo(email)
@@ -316,6 +393,7 @@ export const apiClient = {
       {
         method: "POST",
         body: JSON.stringify({ full_name: fullName, email, password }),
+        skipAuthHeader: true,
       },
       AuthTokenResponseSchema,
       () => demoStore.loginDemo(email)

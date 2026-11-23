@@ -3,13 +3,17 @@
 import * as React from "react";
 import { Check, FileText, FileUp, Sparkles, UploadCloud } from "lucide-react";
 import type { AiDocument } from "@fokussprints/shared";
+import { AuthRequiredCard } from "@/components/auth/auth-required-card";
 import { FlashcardDeck3D } from "@/components/ai/flashcard-deck-3d";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isUnauthorizedError } from "@/lib/api-client";
 import { useAiDocumentsQuery, useUploadAiDocumentMutation } from "@/lib/queries";
+import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 
 const SAMPLE_NOTES = `Teknik Pomodoro dan Active Recall adalah kombinasi paling efektif untuk deep learning.
@@ -17,7 +21,15 @@ Dengan membatasi satu sprint belajar pada durasi 25 menit tanpa berpindah tab br
 Setiap akhir blok 25 menit, uji ingatanmu dengan menutup catatan dan menuliskan 3 poin paling penting menggunakan bahasamu sendiri.`;
 
 export default function AiUploadPage() {
-  const { data: documents = [] } = useAiDocumentsQuery();
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const token = useAuthStore((s) => s.token);
+  const sessionExpired = useAuthStore((s) => s.sessionExpired);
+
+  const {
+    data: documents = [],
+    isLoading: isLoadingDocuments,
+    error: docsError,
+  } = useAiDocumentsQuery();
   const uploadMutation = useUploadAiDocumentMutation();
 
   const [inputMode, setInputMode] = React.useState<"pdf" | "text">("pdf");
@@ -37,6 +49,27 @@ export default function AiUploadPage() {
     }
     return documents[0];
   }, [documents, selectedDocId]);
+
+  if (!hydrated) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-24 w-full rounded-2xl" />
+        <Skeleton className="h-80 w-full rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (!token || isUnauthorizedError(docsError)) {
+    return (
+      <div className="py-6">
+        <AuthRequiredCard
+          sessionExpired={sessionExpired || isUnauthorizedError(docsError)}
+          featureName="AI Upload PDF & Dek 3D Flashcard"
+          showCatalogLink
+        />
+      </div>
+    );
+  }
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -234,7 +267,12 @@ export default function AiUploadPage() {
               <CardTitle className="text-base">Dokumen Tersimpan ({documents.length})</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 pt-1">
-              {documents.length === 0 ? (
+              {isLoadingDocuments && documents.length === 0 ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-14 w-full rounded-xl" />
+                  <Skeleton className="h-14 w-full rounded-xl" />
+                </div>
+              ) : documents.length === 0 ? (
                 <div className="rounded-xl border-2 border-dashed border-sand/50 bg-forest-bg p-4 text-center text-xs text-sage">
                   Belum ada dokumen AI yang dikonversi. Unggah PDF atau tempel catatanmu di atas.
                 </div>

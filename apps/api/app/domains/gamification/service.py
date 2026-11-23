@@ -54,50 +54,56 @@ def serialize_focus_session(session: FocusSession) -> FocusSessionSchema:
 
 
 async def sync_leaderboard_from_db(db: AsyncSession) -> None:
-    users = (await db.execute(select(User).where(User.xp > 0))).scalars().all()
-    for user in users:
-        await redis_service.set_leaderboard_score(user.id, user.xp)
+    users = (
+        await db.execute(select(User.id, User.xp).where(User.xp > 0).order_by(User.xp.desc()).limit(100))
+    ).all()
+    if users:
+        await redis_service.set_leaderboard_scores_bulk({uid: int(xp) for uid, xp in users})
 
 
 async def get_leaderboard(
     db: AsyncSession, current_user: User, limit: int = 20
 ) -> LeaderboardResponseSchema:
     ranked_pairs = await redis_service.get_leaderboard_top(limit=limit)
-    if not ranked_pairs:
-        await sync_leaderboard_from_db(db)
-        ranked_pairs = await redis_service.get_leaderboard_top(limit=limit)
-
-    user_ids = [uid for uid, score in ranked_pairs if score > 0]
-    users_list = (
-        await db.execute(select(User).where(User.id.in_(user_ids)))
-    ).scalars().all() if user_ids else []
-    users_by_id: Dict[str, User] = {u.id: u for u in users_list}
-
     entries: List[LeaderboardEntrySchema] = []
-    for idx, (uid, score) in enumerate(ranked_pairs, start=1):
-        user_row = users_by_id.get(uid)
-        if user_row is None or max(score, user_row.xp) <= 0:
-            continue
-        entries.append(
-            LeaderboardEntrySchema(
-                rank=len(entries) + 1,
-                user_id=user_row.id,
-                full_name=user_row.full_name,
-                avatar_seed=user_row.avatar_seed,
-                level=user_row.level,
-                xp=max(score, user_row.xp),
-                current_streak=user_row.current_streak,
-                is_current_user=user_row.id == current_user.id,
-            )
-        )
+    source = "database"
 
+    if ranked_pairs:
+        user_ids = [uid for uid, score in ranked_pairs if score > 0]
+        users_list = (
+            await db.execute(select(User).where(User.id.in_(user_ids)))
+        ).scalars().all() if user_ids else []
+        users_by_id: Dict[str, User] = {u.id: u for u in users_list}
+
+        for uid, score in ranked_pairs:
+            user_row = users_by_id.get(uid)
+            if user_row is None or max(score, user_row.xp) <= 0:
+                continue
+            entries.append(
+                LeaderboardEntrySchema(
+                    rank=len(entries) + 1,
+                    user_id=user_row.id,
+                    full_name=user_row.full_name,
+                    avatar_seed=user_row.avatar_seed,
+                    level=user_row.level,
+                    xp=max(score, user_row.xp),
+                    current_streak=user_row.current_streak,
+                    is_current_user=user_row.id == current_user.id,
+                )
+            )
+        if entries:
+            source = redis_service.source_name
+
+    # Cold-start atau Redis kosong: cukup 1 query DB langsung + bulk warm cache tanpa round-trip ganda
     if not entries:
-        all_users = (
+        top_users = (
             await db.execute(
                 select(User).where(User.xp > 0).order_by(User.xp.desc()).limit(limit)
             )
         ).scalars().all()
-        for idx, u in enumerate(all_users, start=1):
+        if top_users:
+            await redis_service.set_leaderboard_scores_bulk({u.id: u.xp for u in top_users})
+        for idx, u in enumerate(top_users, start=1):
             entries.append(
                 LeaderboardEntrySchema(
                     rank=idx,
@@ -118,7 +124,6 @@ async def get_leaderboard(
         else:
             current_rank = 0
 
-    source = redis_service.source_name if ranked_pairs else "database"
     return LeaderboardResponseSchema(
         entries=entries,
         current_user_rank=current_rank,

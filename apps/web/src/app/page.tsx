@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { RefreshCw } from "lucide-react";
+import { AuthRequiredCard } from "@/components/auth/auth-required-card";
 import { CoreLearningCard } from "@/components/dashboard/core-learning-card";
 import { DailyQuestsCard } from "@/components/dashboard/daily-quests-card";
 import { LeaderboardPodiumCard } from "@/components/dashboard/leaderboard-podium-card";
@@ -11,18 +12,25 @@ import { XpProgressRing } from "@/components/dashboard/xp-progress-ring";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isUnauthorizedError } from "@/lib/api-client";
 import { useDashboardQuery, useQuizzesQuery } from "@/lib/queries";
+import { useAuthStore } from "@/stores/auth-store";
 
 export default function HomeDashboardPage() {
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const token = useAuthStore((s) => s.token);
+  const sessionExpired = useAuthStore((s) => s.sessionExpired);
+
   const {
     data: dashboard,
     isLoading,
     isError,
+    error,
     refetch,
   } = useDashboardQuery();
   const { data: quizzes = [] } = useQuizzesQuery();
 
-  if (isLoading) {
+  if (!hydrated || (Boolean(token) && isLoading)) {
     return (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.28fr)_minmax(240px,0.58fr)_minmax(240px,0.58fr)]">
         <div className="space-y-5">
@@ -41,6 +49,18 @@ export default function HomeDashboardPage() {
     );
   }
 
+  if (!token || isUnauthorizedError(error)) {
+    return (
+      <div className="py-6">
+        <AuthRequiredCard
+          sessionExpired={sessionExpired || isUnauthorizedError(error)}
+          featureName="Beranda & Studio Belajar"
+          showCatalogLink
+        />
+      </div>
+    );
+  }
+
   if (isError || !dashboard) {
     return (
       <Card tone="cream" className="mx-auto max-w-xl p-6 text-center">
@@ -49,7 +69,7 @@ export default function HomeDashboardPage() {
             Gagal Memuat Halaman Belajar
           </h2>
           <p className="text-sm font-medium text-ink/80">
-            Tidak dapat terhubung ke layanan saat ini. Periksa koneksimu lalu coba muat ulang.
+            Layanan sedang sibuk atau koneksi terputus sementara. Coba muat ulang beberapa saat lagi.
           </p>
           <Button type="button" onClick={() => void refetch()}>
             <RefreshCw className="h-4 w-4" aria-hidden="true" />

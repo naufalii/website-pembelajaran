@@ -13,6 +13,7 @@ import {
 import type { UserProfile } from "@fokussprints/shared";
 import { BrandMascotIcon, BrutalAvatar } from "@/components/icons/brutal-icons";
 import { Progress } from "@/components/ui/progress";
+import { usePrefetchRoute } from "@/lib/queries";
 import { cn, formatNumberID } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -31,6 +32,7 @@ export function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const prefetchRoute = usePrefetchRoute();
 
   const floorXp = user?.xp_current_level_floor ?? 0;
   const nextXp = user?.xp_next_level_target ?? 300;
@@ -73,6 +75,8 @@ export function SidebarNav({
                 key={item.href}
                 href={item.href}
                 onClick={onNavigate}
+                onMouseEnter={() => prefetchRoute(item.href)}
+                onFocus={() => prefetchRoute(item.href)}
                 className={cn(
                   "flex items-center gap-3 rounded-xl border-[2.5px] px-3.5 py-2.5 font-display text-sm font-extrabold brutal-press",
                   isActive
@@ -90,33 +94,43 @@ export function SidebarNav({
 
       {/* Bottom-Left Docked User Level Card */}
       <Link
-        href="/profil"
+        href={user ? "/profil" : "/profil?tab=masuk"}
         onClick={onNavigate}
+        onMouseEnter={() => prefetchRoute("/profil")}
+        onFocus={() => prefetchRoute("/profil")}
         className="mt-6 block rounded-2xl border-[2.5px] border-ink bg-forest-bg p-3.5 shadow-brutal-sm brutal-press"
       >
         <div className="flex items-center gap-3">
           <BrutalAvatar
             seed={user?.avatar_seed ?? "fokus"}
-            name={user?.full_name ?? "Pengguna FokusSprints"}
+            name={user?.full_name ?? "Masuk Akun"}
             size="md"
           />
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-sm font-extrabold text-cream">
-              {user?.full_name ?? "Pengguna FokusSprints"}
+              {user ? user.full_name : "Belum Masuk"}
             </p>
-            <div className="mt-0.5 flex items-center justify-between">
-              <span className="font-display text-xs font-bold text-sand">
-                Level <span className="font-mono tabular-nums">{user?.level ?? 1}</span>
-              </span>
-              <span className="text-xs font-semibold text-sage">
-                <span className="font-mono tabular-nums">{formatNumberID(currentXp)}</span> XP
-              </span>
-            </div>
+            {user ? (
+              <div className="mt-0.5 flex items-center justify-between">
+                <span className="font-display text-xs font-bold text-sand">
+                  Level <span className="font-mono tabular-nums">{user.level}</span>
+                </span>
+                <span className="text-xs font-semibold text-sage">
+                  <span className="font-mono tabular-nums">{formatNumberID(currentXp)}</span> XP
+                </span>
+              </div>
+            ) : (
+              <p className="mt-0.5 text-xs font-bold text-sand">
+                Masuk atau daftar akun
+              </p>
+            )}
           </div>
         </div>
-        <div className="mt-3">
-          <Progress value={pct} aria-label="Progres level pengguna" className="h-3" />
-        </div>
+        {user && (
+          <div className="mt-3">
+            <Progress value={pct} aria-label="Progres level pengguna" className="h-3" />
+          </div>
+        )}
       </Link>
     </div>
   );

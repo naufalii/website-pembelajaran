@@ -56,19 +56,23 @@ async def create_lesson(db: AsyncSession, payload: CreateLessonRequest) -> Lesso
     return serialize_lesson(lesson, None)
 
 
-async def get_lesson_detail(db: AsyncSession, lesson_id: str, user_id: str) -> LessonSummarySchema:
+async def get_lesson_detail(
+    db: AsyncSession, lesson_id: str, user_id: Optional[str] = None
+) -> LessonSummarySchema:
     lesson = (await db.execute(select(Lesson).where(Lesson.id == lesson_id))).scalar_one_or_none()
     if lesson is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pelajaran tidak ditemukan.")
 
-    progress = (
-        await db.execute(
-            select(LessonProgress).where(
-                LessonProgress.user_id == user_id,
-                LessonProgress.lesson_id == lesson_id,
+    progress = None
+    if user_id:
+        progress = (
+            await db.execute(
+                select(LessonProgress).where(
+                    LessonProgress.user_id == user_id,
+                    LessonProgress.lesson_id == lesson_id,
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
     return serialize_lesson(lesson, progress)
 
 
@@ -144,11 +148,14 @@ def _serialize_ai_document(doc: AiDocument) -> AiDocumentSchema:
     )
 
 
-async def list_ai_documents(db: AsyncSession, user_id: str) -> List[AiDocumentSchema]:
+async def list_ai_documents(
+    db: AsyncSession, user_id: str, limit: int = 20
+) -> List[AiDocumentSchema]:
     stmt = (
         select(AiDocument)
         .where(AiDocument.user_id == user_id)
         .order_by(AiDocument.created_at.desc())
+        .limit(limit)
     )
     rows = (await db.execute(stmt)).scalars().all()
     return [_serialize_ai_document(row) for row in rows]

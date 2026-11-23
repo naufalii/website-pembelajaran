@@ -1,13 +1,16 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion } from "motion/react";
-import { Check, Eye, Sparkles, X } from "lucide-react";
+import { Check, Eye, LogIn, Sparkles, X } from "lucide-react";
 import type { QuizItem, QuizSubmitResponse } from "@fokussprints/shared";
 import { QuizMascot } from "@/components/icons/brutal-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { isUnauthorizedError } from "@/lib/api-client";
 import { useSubmitQuizMutation } from "@/lib/queries";
+import { useAuthStore } from "@/stores/auth-store";
 import { useFocusStore } from "@/stores/focus-store";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +26,7 @@ export function QuizCheckpointPanel({
   onSkip?: () => void;
 }) {
   const submitMutation = useSubmitQuizMutation();
+  const token = useAuthStore((s) => s.token);
   const activeSessionId = useFocusStore((s) => s.activeSessionId);
   const xpMultiplier = useFocusStore((s) => s.xpMultiplier);
 
@@ -30,6 +34,10 @@ export function QuizCheckpointPanel({
   const [selectedBoolean, setSelectedBoolean] = React.useState<boolean | null>(null);
   const [flashcardRevealed, setFlashcardRevealed] = React.useState(false);
   const [result, setResult] = React.useState<QuizSubmitResponse | null>(null);
+  const [submitNotice, setSubmitNotice] = React.useState<{
+    message: string;
+    requiresLogin: boolean;
+  } | null>(null);
   const [shakeTick, setShakeTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -37,6 +45,7 @@ export function QuizCheckpointPanel({
     setSelectedBoolean(null);
     setFlashcardRevealed(false);
     setResult(null);
+    setSubmitNotice(null);
   }, [quiz.id]);
 
   const payload = quiz.question_payload;
@@ -51,18 +60,40 @@ export function QuizCheckpointPanel({
 
   const handleSubmit = async (selfRecalled?: boolean) => {
     if (submitMutation.isPending) return;
-    const response = await submitMutation.mutateAsync({
-      quizId: quiz.id,
-      body: {
-        selected_option_id: selectedOption ?? undefined,
-        selected_boolean: selectedBoolean ?? undefined,
-        self_recalled: selfRecalled,
-        focus_session_id: activeSessionId,
-      },
-    });
-    setResult(response);
-    if (!response.is_correct) {
-      setShakeTick((prev) => prev + 1);
+    setSubmitNotice(null);
+    if (!token) {
+      setSubmitNotice({
+        message: "Masuk akun terlebih dahulu untuk menyimpan jawaban dan meraih XP.",
+        requiresLogin: true,
+      });
+      return;
+    }
+    try {
+      const response = await submitMutation.mutateAsync({
+        quizId: quiz.id,
+        body: {
+          selected_option_id: selectedOption ?? undefined,
+          selected_boolean: selectedBoolean ?? undefined,
+          self_recalled: selfRecalled,
+          focus_session_id: activeSessionId,
+        },
+      });
+      setResult(response);
+      if (!response.is_correct) {
+        setShakeTick((prev) => prev + 1);
+      }
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        setSubmitNotice({
+          message: "Sesi masukmu telah berakhir. Masuk kembali untuk mengirim jawaban dan meraih XP.",
+          requiresLogin: true,
+        });
+      } else {
+        setSubmitNotice({
+          message: err instanceof Error ? err.message : "Gagal memeriksa jawaban. Coba lagi.",
+          requiresLogin: false,
+        });
+      }
     }
   };
 
@@ -205,6 +236,21 @@ export function QuizCheckpointPanel({
             >
               <Eye className="h-4 w-4" aria-hidden="true" />
               Buka Jawaban Recall
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Notifikasi Login / Error Submit */}
+      {submitNotice && !result && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-[2.5px] border-ink bg-sand p-3.5 text-ink">
+          <p className="text-xs sm:text-sm font-extrabold">{submitNotice.message}</p>
+          {submitNotice.requiresLogin && (
+            <Button asChild size="sm" variant="surface">
+              <Link href="/profil?tab=masuk">
+                <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Masuk Akun</span>
+              </Link>
             </Button>
           )}
         </div>
