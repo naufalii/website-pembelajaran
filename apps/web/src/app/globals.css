@@ -5,6 +5,10 @@
 @tailwind utilities;
 
 :root {
+  --font-jakarta: "Plus Jakarta Sans", sans-serif;
+  --font-grotesk: "Space Grotesk", "Plus Jakarta Sans", sans-serif;
+  --font-jetbrains: "JetBrains Mono", ui-monospace, monospace;
+
   --color-bg: #0F2A24;
   --color-surface: #173B32;
   --color-surface-elevated: #1F4D42;
